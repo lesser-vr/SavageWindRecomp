@@ -26,6 +26,7 @@
 static const WinSize k_sizes[] = {
     {640, 360}, {960, 540}, {1280, 720}, {1920, 1080}, {2560, 1440}, {3840, 2160},  // 16:9
     {5120, 2880}, {7680, 4320},
+    {1280, 360}, {1920, 540}, {2560, 720}, {3840, 1080}, {5120, 1440}, {7680, 2160},    // Full-SBS
     {2560, 1080}, {3440, 1440}, {3840, 1600},                                            // 21:9
     {1280, 800}, {1680, 1050}, {2560, 1600},                                             // 16:10
     {640, 480}, {800, 600}, {1024, 768}, {1280, 1024}, {1600, 1200},                     // 4:3, 5:4
@@ -58,6 +59,7 @@ static int shape(int w, int h) {
 }
 
 const char *winsize_aspect(int w, int h) {
+    if (9 * w == 32 * h) return "32:9";
     static const char *const names[] = {"16:9", "21:9", "16:10", "4:3", "5:4"};
     int s = shape(w, h);
     return s < 5 ? names[s] : NULL;
@@ -86,6 +88,7 @@ int winsize_list(WinSize *out, bool fullscreen) {
     bool have_desk = false;
     for (int i = 0; i < NSIZES && n < WINSIZE_MAX - 1; i++) {
         WinSize s = k_sizes[i];
+        if (9 * s.w == 32 * s.h && g_settings.stereo_sbs != SBS_FULL) continue;
         bool ok = s.w <= desk.w && s.h <= desk.h;
         for (int m = 0; !ok && fullscreen && m < nm; m++) ok = same(s, modes[m]);
         if (!ok) continue;

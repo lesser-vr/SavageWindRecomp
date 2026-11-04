@@ -1,4 +1,5 @@
 // Applet manager (appletOE), apm, and lm.
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -13,13 +14,24 @@ static uint32_t msg_event_r, msg_event_w;
 static KEvent *msg_event;
 static uint32_t msg_queue[16];
 static int msg_count;
+static atomic_bool vr_mode;
 
 static bool preselected_popped;
 RT_ON_RESET(am_reset) {  // (reboot: the message queue starts over with FocusStateChanged)
     msg_event = NULL;
     msg_event_r = msg_event_w = 0;
     msg_count = 0;
+    atomic_store(&vr_mode, false);
     preselected_popped = false;
+}
+
+static bool am_vr_mode_enabled(void) {
+    return atomic_load(&vr_mode);
+}
+
+static void set_vr_mode(bool enabled) {
+    if (atomic_exchange(&vr_mode, enabled) != enabled)
+        LOG("[stereo] game %s Toy-Con VR mode\n", enabled ? "entered" : "left");
 }
 
 static void am_init_once(void) {
@@ -47,8 +59,7 @@ static uint32_t new_signaled_event(void) {
     return r;
 }
 
-// Logged the first time each: BOTW asks ICommonStateGetter 50 every frame (formatting and writing the line was ~1% of
-// the main thread).
+// Log an unhandled command once; some are polled every frame.
 static void unhandled(const char *iface, uint32_t cmd) {
     static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
     static struct { const char *iface; uint32_t cmd; } seen[64];
@@ -83,6 +94,10 @@ static void common_state_getter(Service *s, IpcReq *req, IpcResp *resp) {
     case 8: OUT(uint8_t, 0) = 0; resp_size(resp, 1); break;   // GetBootMode
     case 9: OUT(uint8_t, 0) = 1; resp_size(resp, 1); break;   // GetCurrentFocusState: in focus
     case 13: case 61: resp->copy_handles[resp->ncopy++] = new_event(); break;
+    case 50: OUT(uint8_t, 0) = am_vr_mode_enabled(); resp_size(resp, 1); break;  // IsVrModeEnabled
+    case 51: if (req->data_size) set_vr_mode(IN(uint8_t, 0) != 0); break;       // SetVrModeEnabled
+    case 53: set_vr_mode(true); break;                                           // BeginVrModeEx
+    case 54: set_vr_mode(false); break;                                          // EndVrModeEx
     case 60: {  // GetDefaultDisplayResolution
         int w = getenv("SAVAGEWIND_DISPLAY_W") ? atoi(getenv("SAVAGEWIND_DISPLAY_W")) : 1920;
         LOG("[am] GetDefaultDisplayResolution -> %dx1080\n", w);

@@ -375,6 +375,10 @@ void rt_vfr_update(uint64_t vfr) {
     g_fs_vfr = plat_now_ns();
     clock_probe(vfr);
     log_screens();
+#ifndef __APPLE__
+    extern void native_vr_frame(void);
+    native_vr_frame();
+#endif
     extern void input_cam_frame(float ratio);  // runtime/hle/input.c: the mouse's motion in the frame, for the cameras
     if (!framepace_on()) {
         g_frame_ratio = VF(float, vfr, VFR_RATIO);

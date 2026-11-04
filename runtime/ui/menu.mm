@@ -742,6 +742,12 @@ static void tab_display(void) {
         }
     }
     {   // Fill wide screens (runtime/nvn/output_scale.c rt_persp)
+#ifndef __APPLE__
+        static const char *const formats[] = {"Off", "Half-SBS", "Full-SBS"};
+        opt_choice("Toy-Con VR output", &g_settings.stereo_sbs, formats, SBS_COUNT, SBS_OFF,
+                   "On game version 1.9.0, the VR goggles turn on automatically during gameplay. "
+                   "Half-SBS uses a 16:9 output. Full-SBS uses a 32:9 output for two 16:9 views.");
+#endif
         bool wv = g_settings.wide_view;
         if (opt_toggle("Fill wide screens", &wv, true,
                        "On a window or screen that isn't 16:9 the game shows more of the world instead of black bars: "

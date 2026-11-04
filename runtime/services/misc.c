@@ -19,6 +19,8 @@ static uint32_t new_event_handle(void) {
 static void pctl_service(Service *s, IpcReq *req, IpcResp *resp) {
     (void)s;
     switch (req->cmd) {
+    case 1013: break;  // ConfirmStereoVisionPermission: this host has no configured restriction
+    case 1065: OUT(uint8_t, 0) = 1; resp_size(resp, 1); break;  // IsStereoVisionPermitted
     case 1031: case 1035: case 1018: OUT(uint8_t, 0) = 0; resp_size(resp, 1); break;  // restrictions off
     case 1032: OUT(uint32_t, 0) = 0; resp_size(resp, 4); break;
     default: LOG("[pctl] IParentalControlService cmd %u (ok)\n", req->cmd); resp_size(resp, 0x10);

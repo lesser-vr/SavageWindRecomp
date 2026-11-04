@@ -6290,6 +6290,7 @@ static bool draw_must_happen(void) {
     }
     return false;
 }
+static void capture_labo_atlas(Prog *pr);
 static void draw_(CmdRec *r, bool indexed);
 static uint64_t stat_discarded;
 static void draw(CmdRec *r, bool indexed) {
@@ -7057,6 +7058,7 @@ have_pipe:
         }
         gp_draws[gp_n - 1]++;
     }
+    if (g_settings.stereo_sbs) capture_labo_atlas(pr);
 }
 
 static void debug_save_channels(TexBackend *b, const char *path);
@@ -7645,7 +7647,7 @@ static VkPipeline post_pipeline(const char *fs, VkFormat fmt) {
 // Post image `i` at w x h in format f (kept until the size or format changes). 0, 1: SMAA edges / weights, 2: SMAA
 // output, 3, 4: FSR EASU / RCAS of the presented image; 5, 6: FSR EASU / RCAS of the 3D scene, 7: its CAS
 // sharpening (scene_post), 32: its colour grading.
-enum { POST_IMAGES = 33 };  // (mvec: 8 the object vectors, 9 the debug view, 10 the motion vectors, 11 / 12 TAA's
+enum { POST_LABO = 33, POST_IMAGES };  // (mvec: 8 the object vectors, 9 the debug view, 10 the motion vectors, 11 / 12 TAA's
                             //  history; FSR 3: 13 its output, 14 the depth, 15 the reactive mask; 16-31 TAA: mvec_taa)
 static TexBackend *post_image_ex(int i, uint32_t w, uint32_t h, VkFormat f, VkImageUsageFlags extra);
 static TexBackend *post_image(int i, uint32_t w, uint32_t h, VkFormat f) { return post_image_ex(i, w, h, f, 0); }
@@ -8654,10 +8656,44 @@ static TexBackend *fsr3_scene(VkCommandBuffer cb, TexBackend *b, uint32_t ow, ui
     return out;
 }
 
+static TexBackend *labo_atlas;
+static uint64_t labo_frame;
+
+// BOTW 1.9.0's hdr_compose goggles variants read the distortion LUT and the finished, linear RGB10A2
+// atlas (including the game HUD). Snapshot it while both images are live. A different frame, such
+// as a menu or movie that the game only draws once, must never reuse the previous stereo image.
+static void capture_labo_atlas(Prog *pr) {
+    switch (g_cur_fs_hash) {
+    case 0x2490210db9154f00ull: case 0xacfdceb95c3b2a7bull:
+    case 0x22db5652fcc60420ull: case 0x4794839af8a0b871ull: break;
+    default: return;
+    }
+    uint64_t frame = renderer_present_count() + 1;
+    if (frame == labo_frame || pr->fi->ntex != 2 || st.rt.ncolor != 1) return;
+    NvnTexture *lut = shader_texture_object(1, &pr->fi->tex[0]);
+    NvnTexture *tex = shader_texture_object(1, &pr->fi->tex[1]);
+    if (!lut || lut->height != 1 || !tex || tex->format != 0x3d) return;
+    TexBackend *src = tex->backend;
+    if (!src || !src->image || src->samples != 1 || src->layers != 1) return;
+    vk_end_pass();
+    labo_atlas = post_image_ex(POST_LABO, src->width, src->height, src->format, VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    VkCommandBuffer cb = vk_cmd();
+    vk_full_barrier(cb);
+    VkImageCopy region = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                          .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .extent = {src->width, src->height, 1}};
+    rec_CmdCopyImage(cb, src->image, VK_IMAGE_LAYOUT_GENERAL, labo_atlas->image, VK_IMAGE_LAYOUT_GENERAL, 1, &region);
+    vk_full_barrier(cb);
+    if (!labo_frame) LOG("[stereo] captured native Toy-Con eye atlas %ux%u before lens correction\n", src->width, src->height);
+    labo_frame = frame;
+}
+
 // Inside the window image's rendering (device.c vk_frame_begin): the game image into (vx, vy, vw, vh).
 void vk_present_draw(VkCommandBuffer cb, TexBackend *b, float vx, float vy, float vw, float vh, const float pv[8]) {
     if (!b || !b->image || (b->aspect & ~VK_IMAGE_ASPECT_COLOR_BIT)) return;
-    VkImageView src = post_process(cb, b, pv[6] > 0 ? vw / pv[6] : vw, pv[7] > 0 ? vh / pv[7] : vh);
+    bool sbs = g_settings.stereo_sbs != SBS_OFF;
+    bool native = sbs && labo_atlas && labo_frame == renderer_present_count() + 1;
+    float display_w = sbs ? vh * (16.f / 9.f) : vw;
+    VkImageView src = native ? raw_view(labo_atlas) : post_process(cb, b, pv[6] > 0 ? display_w / pv[6] : display_w, pv[7] > 0 ? vh / pv[7] : vh);
     VkPipeline p = present_pipeline(g_vk.sc_format);
     VkDescriptorSet ds = vk_alloc_set(present_set_layout);
     VkDescriptorImageInfo ii = {vk_default_sampler(true), src, VK_IMAGE_LAYOUT_GENERAL};
@@ -8667,10 +8703,23 @@ void vk_present_draw(VkCommandBuffer cb, TexBackend *b, float vx, float vy, floa
     rec_CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, p);
     vk_dyn_forget();
     rec_CmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, present_layout, 0, 1, &ds, 0, NULL);
-    VkViewport vp = {vx, vy, vw, vh, 0, 1};
-    rec_CmdSetViewport(cb, 0, 1, &vp);
-    rec_CmdPushConstants(cb, present_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, 32, pv);
-    rec_CmdDraw(cb, 3, 1, 0, 0);
+    int eyes = sbs ? 2 : 1;
+    for (int eye = 0; eye < eyes; eye++) {
+        float pc[8];
+        memcpy(pc, pv, sizeof pc);
+        if (native) {
+            // A centered 560x315 rectangle in each masked 640x720 eye of the 1280x720 reference
+            // atlas. Lens axes are offset inward. Coordinates stay normalized at other resolutions.
+            pc[1] = 1; // the RGB10A2 atlas is linear, presentation expects display-encoded colour
+            pc[4] = eye ? 0.5f : 1.f / 16.f;
+            pc[5] = 9.f / 32.f;
+            pc[6] = pc[7] = 7.f / 16.f;
+        }
+        VkViewport vp = {vx + eye * vw / eyes, vy, vw / eyes, vh, 0, 1};
+        rec_CmdSetViewport(cb, 0, 1, &vp);
+        rec_CmdPushConstants(cb, present_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof pc, pc);
+        rec_CmdDraw(cb, 3, 1, 0, 0);
+    }
     VkViewport full = {0, 0, (float)g_vk.sc_extent.width, (float)g_vk.sc_extent.height, 0, 1};
     rec_CmdSetViewport(cb, 0, 1, &full);
 }

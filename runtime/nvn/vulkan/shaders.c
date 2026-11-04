@@ -994,15 +994,17 @@ static const char taa_resolve[] =
 static const char *builtin_src(const char *name, int *stage) {
     if (!strcmp(name, "present.vert")) {
         *stage = STAGE_VERTEX;
-        // pv[0].x: flip (lower-left origin), pv[1]: uv crop (origin, size). Fullscreen triangle; Vulkan NDC y points down.
+        // pv[0].x: flip, .y: linear Toy-Con colour; pv[1]: uv crop (origin, size).
         return "#version 450\n"
                "layout(push_constant) uniform P { vec4 a; vec4 crop; } pc;\n"
                "layout(location = 0) out vec2 uv;\n"
+               "layout(location = 1) flat out float linearSource;\n"
                "void main() {\n"
                "  vec2 p = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);\n"
                "  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);\n"
                "  vec2 u = vec2(p.x, pc.a.x > 0.5 ? 1.0 - p.y : p.y);\n"
                "  uv = pc.crop.xy + u * pc.crop.zw;\n"
+               "  linearSource = pc.a.y;\n"
                "}\n";
     }
     if (!strcmp(name, "present.frag")) {
@@ -1010,8 +1012,13 @@ static const char *builtin_src(const char *name, int *stage) {
         return "#version 450\n"
                "layout(set = 0, binding = 0) uniform sampler2D t;\n"
                "layout(location = 0) in vec2 uv;\n"
+               "layout(location = 1) flat in float linearSource;\n"
                "layout(location = 0) out vec4 o;\n"
-               "void main() { o = vec4(texture(t, uv).rgb, 1.0); }\n";
+               "void main() {\n"
+               "  vec3 c = texture(t, uv).rgb;\n"
+               "  if (linearSource > 0.5) c = mix(1.055 * pow(max(c, vec3(0)), vec3(1.0/2.4)) - 0.055, 12.92*c, lessThanEqual(c, vec3(0.0031308)));\n"
+               "  o = vec4(c, 1.0);\n"
+               "}\n";
     }
     // ---- post passes before the present (Video tab "Anti-aliasing" / "Upscaler"): exec.c vk_present_draw.
     // Each draws a fullscreen triangle into an image the size of its output; push constants: two vec4.

@@ -1721,6 +1721,7 @@ void vk_fg_wait_idle(void) {
 }
 
 static bool fg_wanted(void) {
+    if (g_settings.stereo_sbs) return false;  // the interpolator has only one scene camera/history
     static int forced = -2;
     if (forced == -2) forced = getenv("SAVAGEWIND_FG") ? atoi(getenv("SAVAGEWIND_FG")) : -1;
     if (!(forced >= 0 ? forced : g_settings.frame_gen)) return false;
@@ -1783,7 +1784,13 @@ static void present_locked(NvnTexture *t) {
         // Fullscreen on a size the display has no mode for (runtime/window_size.c): that size, scaled to the screen.
         OutScale os;
         int iw, ih;
-        if (winsize_virtual(&iw, &ih) && (iw != (int)dw || ih != (int)dh)) {
+        if (g_settings.stereo_sbs) {
+            double aspect = (g_settings.stereo_sbs == SBS_FULL ? 32.0 : 16.0) / 9.0;
+            double height = fmin(dh, dw / aspect);
+            output_scale(height * (16.0 / 9.0), height, false, &os);
+            os.vh = height; os.vw = height * aspect;
+            os.vx = (dw - os.vw) * 0.5; os.vy = (dh - os.vh) * 0.5;
+        } else if (winsize_virtual(&iw, &ih) && (iw != (int)dw || ih != (int)dh)) {
             output_scale(iw, ih, g_settings.wide_view, &os);
             output_scale_screen(dw, dh, iw, ih, &os);
         } else {

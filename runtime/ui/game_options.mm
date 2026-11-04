@@ -152,6 +152,7 @@ const char *const k_icons[] = {"Automatic", "Keyboard", "Xbox", "PlayStation", "
 constexpr int k_fps[] = FPS_CHOICES;  // frame rate (0: Off, no limit)
 const char *const k_vsync[VSYNC_COUNT] = {"On", "Fast", "Adaptive", "Off"};  // (settings.h VSYNC_*)
 const char *const k_hdr[HDR_COUNT] = {"Automatic", "On", "Off"};               // (settings.h HDR_*)
+const char *const k_stereo_sbs[SBS_COUNT] = {"Off", "Half-SBS", "Full-SBS"};
 const char *const k_fsmode[FSMODE_COUNT] = {"Automatic", "Borderless", "Exclusive"};  // (settings.h FSMODE_*)
 constexpr int FPS_DEFAULT_INDEX = 2;
 static_assert(k_fps[FPS_DEFAULT_INDEX] == FPS_DEFAULT);
@@ -329,6 +330,13 @@ void build_items(void) {
         menu_request_window_apply();
     };
     v.push_back(ws);
+#ifndef __APPLE__
+    v.push_back(choice(P_VIDEO, "Toy-Con VR output", "On game version 1.9.0, Half-SBS and Full-SBS automatically enable Toy-Con VR Goggles when gameplay starts.",
+                       [](const Item &) { return N(k_stereo_sbs); },
+                       [](const Item &, int x) { return tr(k_stereo_sbs[x]); },
+                       [](const Item &) { return g_settings.stereo_sbs; },
+                       [](const Item &, int x) { g_settings.stereo_sbs = x; }, SBS_OFF));
+#endif
     v.push_back(toggle(P_VIDEO, "Fill wide screens", "Shows more of the world on screens that aren't 16:9 (wider or taller), instead of bars.",
                        [](const Item &) { return (int)g_settings.wide_view; },
                        [](const Item &, int x) { g_settings.wide_view = x; }, 1));
@@ -698,7 +706,7 @@ bool install(void) {
     }
     for (auto &o : g_order) o.clear();
     // the game's rows: camera and motion aiming ones on Controls; amiibo, the voice language (Language has the voices)
-    // and the VR goggles mode (no use on a PC screen) left out; the rest on Gameplay
+    // are left out. The original VR goggles row is exposed below, including when SBS packing is off.
     for (uint32_t r = 0; r < rows; r++) {
         uint32_t e = ((const uint32_t *)(uintptr_t)order)[r];
         if (e == GAME_AMIIBO || e == GAME_VOICE_BUTTON || e == GAME_VOICE_LEVEL || e == GAME_VR) continue;
@@ -706,6 +714,7 @@ bool install(void) {
         g_order[camera ? P_CONTROLS : P_GAMEPLAY].push_back(e);
     }
     for (size_t i = 0; i < g_items.size(); i++) g_order[g_items[i].page].push_back(GAME_ENTRIES + (uint32_t)i);
+    g_order[P_GAMEPLAY].push_back(GAME_VR);  // entry 13 is present even if the game's original order omitted it
     g_installed = (uint64_t)(uintptr_t)g_entries.data();
     wr64(OPT_ENTRIES, g_installed);
     wr32(OPT_COUNT, (uint32_t)g_entries.size());
