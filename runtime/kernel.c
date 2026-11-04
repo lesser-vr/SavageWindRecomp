@@ -211,8 +211,7 @@ void kernel_thread_off_cores(void) {
     t->off_cores = true;
 }
 
-// Host code running on a guest thread (an HLE call) waits until t without holding the thread's core, in slices of
-// at most 50 ms so a reboot doesn't wait it out (as svcSleepThread).
+// Sleep without holding the guest core, in slices of at most 50 ms so a reboot doesn't wait out a long sleep.
 void kernel_sleep_until_ns(uint64_t t) {
     KThread *me = t_cur;
     core_release(me);
@@ -960,16 +959,11 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
         break;
     }
     case 0x0A: longjmp(t_cur->unwind, 1);  // ExitThread: back to thread_main, which signals the thread object
-    case 0x0B: {  // SleepThread (in slices of at most 50 ms: a reboot doesn't wait out a long sleep)
+    case 0x0B: {  // SleepThread
         int64_t ns = (int64_t)x[0];
         if (ns <= 0) { core_yield(t_cur); break; }
-        core_release(t_cur);
-        for (uint64_t end = plat_now_ns() + (uint64_t)ns, now; !g_rt_unwind && (now = plat_now_ns()) < end;) {
-            uint64_t d = end - now < 50000000 ? end - now : 50000000;
-            struct timespec ts = {(time_t)(d / 1000000000), (long)(d % 1000000000)};
-            nanosleep(&ts, NULL);
-        }
-        core_acquire(t_cur);
+        // A warp polls with 1 ms sleeps. Winpthreads nanosleep can stretch each one to a full timer tick.
+        kernel_sleep_until_ns(plat_now_ns() + (uint64_t)ns);
         break;
     }
     case 0x0C: {  // GetThreadPriority(_, handle)
