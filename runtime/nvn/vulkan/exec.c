@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "../../kernel.h"
@@ -799,6 +800,18 @@ static bool sync_shaders(void) {
     static int env = -1;
     if (env < 0) env = getenv("SAVAGEWIND_SYNC_SHADERS") ? 1 : getenv("SAVAGEWIND_ASYNC_SHADERS") ? 0 : 2;
     return env == 2 ? !g_settings.async_shaders : env;
+}
+
+// Mandatory draws can depend on many small builds in a single frame. Wake the
+// renderer as each one finishes instead of rounding every wait up to a timer tick.
+static pthread_mutex_t built_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t built_cond = PTHREAD_COND_INITIALIZER;
+
+static void finish_build(_Atomic int *state, int result) {
+    pthread_mutex_lock(&built_lock);
+    atomic_store(state, result);
+    pthread_cond_broadcast(&built_cond);
+    pthread_mutex_unlock(&built_lock);
 }
 
 // Shader translation: one dedicated thread (the translator's debugging switches are globals, set per translation -
@@ -2463,7 +2476,7 @@ static void compile_program(void *arg) {
     uint64_t pt0 = SDL_GetTicksNS();
     bool made;
     const ProgBuild *b = prog_build(p->vi, p->fi, &made);
-    if (!b) { atomic_store(&p->state, 2); return; }
+    if (!b) { finish_build(&p->state, 2); return; }
     p->nbinds = b->nbinds;
     memcpy(p->binds, b->binds, sizeof b->binds[0] * (size_t)b->nbinds);
     p->vs = b->vs;
@@ -2479,7 +2492,7 @@ static void compile_program(void *arg) {
     } else {
         atomic_fetch_add(&stat_warm, 1);
     }
-    atomic_store(&p->state, 1);
+    finish_build(&p->state, 1);
 }
 
 // SAVAGEWIND_SHADER_DUMP=1: the Maxwell code of shaders that fail to translate -> build/shaders/<stage>_<addr>.bin
@@ -2565,13 +2578,13 @@ static void translate_program(void *arg) {
     if (!p->vi->msl) {
         LOG("[shader] VS translate failed: %s (code %llx)\n", p->vi->error, (unsigned long long)p->code[0]);
         dump_failed_shader(p->code[0], p->cmax[0], "vs");
-        atomic_store(&p->state, 2);
+        finish_build(&p->state, 2);
         return;
     }
     if (!p->fi->msl) {
         LOG("[shader] FS translate failed: %s (code %llx)\n", p->fi->error, (unsigned long long)p->code[1]);
         dump_failed_shader(p->code[1], p->cmax[1], "fs");
-        atomic_store(&p->state, 2);
+        finish_build(&p->state, 2);
         return;
     }
     p->vs_uses_vid = strstr(p->vi->msl, "gl_VertexIndex") != NULL;
@@ -3336,7 +3349,7 @@ static void build_pipeline(void *arg) {
         atomic_fetch_add(&stat_warm, 1);
     }
     pp->pipe = w->pipe;
-    atomic_store(&pp->state, atomic_load(&w->state) == 2 ? 1 : 2);
+    finish_build(&pp->state, atomic_load(&w->state) == 2 ? 1 : 2);
 }
 
 // ================================================================== feedback snapshots (renderer.m resolve_feedback)
@@ -6327,8 +6340,14 @@ static bool one_shot_target(void) {
 // tiles: region-tests) wait for their program or pipeline instead of being skipped while it builds.
 static void wait_built(_Atomic int *state) {  // (0 building: until built or failed, 5 s at most)
     if (atomic_load(state) != 0 || sync_shaders()) return;
-    uint64_t t0 = SDL_GetTicksNS();
-    while (atomic_load(state) == 0 && SDL_GetTicksNS() - t0 < 5000000000ull) SDL_Delay(1);
+    struct timespec deadline;
+    clock_gettime(CLOCK_REALTIME, &deadline);
+    deadline.tv_sec += 5;
+    pthread_mutex_lock(&built_lock);
+    while (atomic_load(state) == 0) {
+        if (pthread_cond_timedwait(&built_cond, &built_lock, &deadline) != 0) break;
+    }
+    pthread_mutex_unlock(&built_lock);
     stat_build_waits++;
 }
 
