@@ -1050,7 +1050,13 @@ static void upload_levels(NvnTexture *t, TexBackend *b, uint32_t level_mask) {
             bool expand = mf.expand_rgb && fi->bpb == 3;
             uint32_t out_row = expand ? l.wb * 4 : row;
             VkSpan s = vk_transient((uint64_t)out_row * l.hb * l.d, 16);
-            uint8_t *lin = expand ? malloc(sz) : s.ptr;
+            // Icon recognition and BC4 decoding read individual texels. Do that in CPU memory before writing
+            // the upload ring: reading its write-combined mapping can stall a single icon change for 70 ms.
+            bool icons = lv == 0 && layer == 0 &&
+                         ((t->format == 0x49 && t->pool) || (t->format == 0x01 && !linear)) &&
+                         glyphs_may_apply(t->format, l.w, l.h);
+            uint8_t *lin = expand || icons ? malloc(sz) : s.ptr;
+            if (icons && !lin) lin = s.ptr;
             const uint8_t *src = (const uint8_t *)(uintptr_t)t->addr + layer * layer_size + l.offset;
             if (linear) {
                 for (uint32_t y = 0; y < l.hb; y++) memcpy(lin + (uint64_t)y * row, src + (uint64_t)y * (t->stride ? t->stride : row), row);
@@ -1082,6 +1088,9 @@ static void upload_levels(NvnTexture *t, TexBackend *b, uint32_t level_mask) {
                 uint8_t *o = s.ptr;
                 uint64_t n = (uint64_t)l.wb * l.hb * l.d;
                 for (uint64_t i = 0; i < n; i++) { o[i * 4] = lin[i * 3]; o[i * 4 + 1] = lin[i * 3 + 1]; o[i * 4 + 2] = lin[i * 3 + 2]; o[i * 4 + 3] = 255; }
+                free(lin);
+            } else if (lin != s.ptr) {
+                memcpy(s.ptr, lin, sz);
                 free(lin);
             }
             uint32_t w = l.w, hh = l.h, d = l.d;

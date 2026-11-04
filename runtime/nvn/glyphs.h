@@ -3,6 +3,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// True for sizes and formats whose contents the icon recognizer may read during upload.
+bool glyphs_may_apply(uint32_t format, uint32_t w, uint32_t h);
+
 // The texture at addr (format: NVN format, w x h texels) is a button glyph sheet: lin holds its texels as uploaded
 // (linear rows of 4x4 BC4 blocks, wb x hb); they are replaced by the glyphs for the current device. Returns true when
 // the texture is such a sheet (whether or not it changed it).
