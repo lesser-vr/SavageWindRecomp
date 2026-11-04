@@ -92,7 +92,7 @@ VkDescriptorSet vk_alloc_set(VkDescriptorSetLayout layout);
 // ---- textures (textures.c)
 // Render-target scale groups (textures.c tex_scale_group): none, the 3D scene's (internal resolution), the final
 // image's (the window's resolution), shadow maps (Video > Shadow resolution)
-enum { RS_NONE = 0, RS_SCENE = 1, RS_OUT = 2, RS_SHADOW = 3 };
+enum { RS_NONE = 0, RS_SCENE = 1, RS_OUT = 2, RS_SHADOW = 3, RS_LABO_EYE = 4 };
 
 typedef struct TexBackend {
     VkImage image;
@@ -173,7 +173,7 @@ bool vk_is_shadow_copy(const NvnTexture *t);  // the sun cascades' half-size R16
 bool vk_shadow_direct(void);                  // its readers compare against the cascades (SAVAGEWIND_NO_SHADOW_DIRECT=1: off)
 bool vk_shadow_scaled(const NvnTexture *t);  // the cascades t are bigger than the game's (Shadow resolution above Console)
 void renderer_get_scene_scale(float *sx, float *sy);
-void renderer_set_scene_scale(float sx, float sy);
+void renderer_set_scene_scale(float sx, float sy, bool sbs);
 void renderer_set_shadow_size(uint32_t n);  // shadow maps' width (RS_SHADOW; 0: the game's own)
 uint64_t vk_frame_counter(void);
 

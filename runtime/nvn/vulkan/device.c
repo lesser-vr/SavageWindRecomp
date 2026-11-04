@@ -1643,7 +1643,6 @@ void vk_save_png(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h) 
 extern void vk_present_draw(VkCommandBuffer cb, TexBackend *b, float vx, float vy, float vw, float vh, const float pv[8]);
 void renderer_submit(void);
 void renderer_set_scale(float sx, float sy);
-void renderer_set_scene_scale(float sx, float sy);
 uint64_t renderer_present_count(void);
 void renderer_save_texture_tex(TexBackend *b, const char *path);
 
@@ -1784,12 +1783,9 @@ static void present_locked(NvnTexture *t) {
         // Fullscreen on a size the display has no mode for (runtime/window_size.c): that size, scaled to the screen.
         OutScale os;
         int iw, ih;
-        if (g_settings.stereo_sbs) {
-            double aspect = (g_settings.stereo_sbs == SBS_FULL ? 32.0 : 16.0) / 9.0;
-            double height = fmin(dh, dw / aspect);
-            output_scale(height * (16.0 / 9.0), height, false, &os);
-            os.vh = height; os.vw = height * aspect;
-            os.vx = (dw - os.vw) * 0.5; os.vy = (dh - os.vh) * 0.5;
+        int sbs = g_settings.stereo_sbs;
+        if (sbs != SBS_OFF) {
+            output_scale_sbs(dw, dh, sbs, g_settings.sbs_render_scale, g_vk.props.limits.maxImageDimension2D, &os);
         } else if (winsize_virtual(&iw, &ih) && (iw != (int)dw || ih != (int)dh)) {
             output_scale(iw, ih, g_settings.wide_view, &os);
             output_scale_screen(dw, dh, iw, ih, &os);
@@ -1799,7 +1795,7 @@ static void present_locked(NvnTexture *t) {
         double sx = os.sx, sy = os.sy, vx = os.vx, vy = os.vy, vw = os.vw, vh = os.vh;
         float crop[4] = {(float)os.crop[0], (float)os.crop[1], (float)os.crop[2], (float)os.crop[3]};  // (uv origin, size)
         renderer_set_scale((float)sx, (float)sy);
-        renderer_set_scene_scale((float)os.scene_sx, (float)os.scene_sy);
+        renderer_set_scene_scale((float)os.scene_sx, (float)os.scene_sy, sbs != SBS_OFF);
         renderer_set_shadow_size(shadow_map_size(total_frames + 1));
         VkCommandBuffer cb = vk_cmd();
         float pv[8] = {renderer_origin_lower_left() ? 1.0f : 0.0f, 0, 0, 0, crop[0], crop[1], crop[2], crop[3]};

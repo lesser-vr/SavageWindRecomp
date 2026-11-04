@@ -336,6 +336,11 @@ void build_items(void) {
                        [](const Item &, int x) { return tr(k_stereo_sbs[x]); },
                        [](const Item &) { return g_settings.stereo_sbs; },
                        [](const Item &, int x) { g_settings.stereo_sbs = x; }, SBS_OFF));
+    v.push_back(choice(P_VIDEO, "SBS render scale", "Auto matches each eye's visible image to its output pixels. The other choices scale both axes equally. Higher resolutions use more GPU time and memory.",
+                       [](const Item &) { return N(sbs_scale_labels); },
+                       [](const Item &, int x) { return tr(sbs_scale_labels[x]); },
+                       [](const Item &) { return g_settings.sbs_render_scale; },
+                       [](const Item &, int x) { g_settings.sbs_render_scale = x; }, SBS_SCALE_1X));
 #endif
     v.push_back(toggle(P_VIDEO, "Fill wide screens", "Shows more of the world on screens that aren't 16:9 (wider or taller), instead of bars.",
                        [](const Item &) { return (int)g_settings.wide_view; },

@@ -172,19 +172,30 @@ static bool format_is_float(VkFormat f) {  // (uncompressed: these can hold NaN 
 //             forward-shaded surfaces take their shadows from it (issue #101)
 static float g_rs[4][2] = {{1, 1}, {1, 1}, {1, 1}, {1, 1}};
 static uint32_t g_shadow_size;
+static bool g_sbs;
 void renderer_get_scale(float *sx, float *sy) { *sx = g_rs[RS_OUT][0]; *sy = g_rs[RS_OUT][1]; }
 void renderer_set_scale(float sx, float sy) { g_rs[RS_OUT][0] = sx; g_rs[RS_OUT][1] = sy; }
 void renderer_get_scene_scale(float *sx, float *sy) { *sx = g_rs[RS_SCENE][0]; *sy = g_rs[RS_SCENE][1]; }
-void renderer_set_scene_scale(float sx, float sy) { g_rs[RS_SCENE][0] = sx; g_rs[RS_SCENE][1] = sy; }
+void renderer_set_scene_scale(float sx, float sy, bool sbs) {
+    g_rs[RS_SCENE][0] = sx; g_rs[RS_SCENE][1] = sy;
+    g_sbs = sbs;
+}
 void renderer_set_shadow_size(uint32_t n) {  // (never past what the GPU can make: Extreme is 8192)
     g_shadow_size = n < g_vk.props.limits.maxImageDimension2D ? n : g_vk.props.limits.maxImageDimension2D;
 }
 uint64_t renderer_present_count(void);
+// The group stays with the cached image. Its allocation follows SBS even if the
+// game created the texture before the player changed the output mode.
+static uint8_t allocation_group(const TexBackend *b) {
+    if (b->rs_group == RS_LABO_EYE) return g_sbs ? RS_SCENE : RS_NONE;
+    return b->rs_group;
+}
 static float rs_want(const TexBackend *b, int axis) {  // the scale a texture of b's group is wanted at now
-    if (b->rs_group != RS_SHADOW) return g_rs[b->rs_group][axis];
+    if (b->rs_group != RS_SHADOW) return g_rs[allocation_group(b)][axis];
     return b->guest_w && g_shadow_size > b->guest_w ? (float)g_shadow_size / (float)b->guest_w : 1.0f;  // (square)
 }
 static bool rs_stale(const TexBackend *b) {
+    if (b->rs_group == RS_LABO_EYE && b->scalable != g_sbs) return true;
     return b->rs_group && (b->sx != rs_want(b, 0) || b->sy != rs_want(b, 1));
 }
 
@@ -227,6 +238,12 @@ static uint8_t tex_scale_group(const NvnTexture *t) {
         return RS_SHADOW;
     if (!vk_shadow_direct() && vk_is_shadow_copy(t)) return RS_SHADOW;  // (the copy's readers use the cascades instead)
     if ((t->target != 1 && t->target != 4) || t->samples > 1 || !(t->flags & 9) || t->width < 32 || t->height < 16) return RS_NONE;
+    // BOTW's native VR G-buffer, depth and their downsample chain are half the
+    // width of the normal scene. Keep eye images out of mono temporal passes.
+    if (!(t->flags & 1)) {
+        for (unsigned level = 0; level < 5; level++)
+            if (t->width == (800u >> level) && t->height == (900u >> level)) return RS_LABO_EYE;
+    }
     float a = (float)t->width / (float)t->height;
     if (a < 1.74f || a > 1.81f) return RS_NONE;
     if (t->flags & 1) return RS_OUT;  // NVN_TEXTURE_FLAGS_DISPLAY: the images the game presents
@@ -344,7 +361,7 @@ VkFormat vk_view_format(TexBackend *b, VkFormat want) {
 
 static void create_image(NvnTexture *t, TexBackend *b) {
     VkFmt mf = fmt_of(t->format);
-    b->scalable = b->rs_group != RS_NONE;
+    b->scalable = allocation_group(b) != RS_NONE;
     // (RS_SHADOW: the cascades' width, also for their half-size copy, so that both grow by the same factor)
     b->guest_w = b->rs_group == RS_SHADOW && !renderer_format_is_depth(t->format) ? t->width * 2 : t->width;
     b->sx = rs_want(b, 0);
@@ -483,6 +500,9 @@ static void create_image(NvnTexture *t, TexBackend *b) {
     b->serial = __atomic_add_fetch(&serials, 1, __ATOMIC_RELAXED);
     b->format = vf;
     b->width = tw; b->height = th; b->depth = depth; b->layers = layers; b->levels = levels; b->samples = samples;
+    if (b->rs_group == RS_LABO_EYE && g_sbs && depthfmt && t->width == 800 && t->height == 900) {
+        LOG("[stereo] native eye depth target %ux%u (guest 800x900)\n", tw, th);
+    }
     b->aspect = depthfmt ? aspect_of(t->format) : VK_IMAGE_ASPECT_COLOR_BIT;
     b->base_type = type == VK_IMAGE_TYPE_1D ? (layers > 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : VK_IMAGE_VIEW_TYPE_1D)
                  : type == VK_IMAGE_TYPE_3D ? VK_IMAGE_VIEW_TYPE_3D

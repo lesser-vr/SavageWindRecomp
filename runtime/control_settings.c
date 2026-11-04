@@ -29,6 +29,11 @@ static const Setting settings[] = {
     I(upscaler, 0, UPSCALE_COUNT - 1, "off|metalfx|fsr1|fsr3|dlss"),
     I(upscale_quality, 0, UPQ_COUNT - 1, "ultra_quality|quality|balanced|performance|ultra_performance"),
     I(antialias, 0, AA_TAA, "off|smaa|taa"),
+#ifndef __APPLE__
+    I(stereo_sbs, SBS_OFF, SBS_FULL, "off|half|full"),
+    I(sbs_render_scale, SBS_SCALE_1X, SBS_SCALE_AUTO, "1x|1.25x|1.5x|2x|auto"),
+    {"sbs_supersampling", NULL, BOOL, 0, 1, "off|on"},  // Legacy 1.5x switch.
+#endif
     I(anisotropy, 0, 4, "game|2x|4x|8x|16x"), I(sharpening, 0, 10, NULL),
     B(frame_gen), F(volume, 0, 2), B(reverb), B(movie_audio),
     I(perf_overlay, 0, PERF_FULL, "off|fps|full"), I(fps_limit, 0, 120, NULL),
@@ -73,6 +78,7 @@ static int named(const char *names, const char *value) {
     }
 }
 static void emit(const Setting *s, ControlReply *r) {
+    if (is(s, "sbs_supersampling")) { control_field_bool(r, s->key, g_settings.sbs_render_scale == SBS_SCALE_150); return; }
     if (s->kind == TEXT) { control_field_str(r, s->key, s->value); return; }
     if (s->kind == BOOL) { control_field_bool(r, s->key, *(bool *)s->value); return; }
     if (s->kind == FLOAT) { control_field_num(r, s->key, *(float *)s->value); return; }
@@ -196,7 +202,8 @@ static void cmd_set(int argc, char **argv, ControlReply *r) {
         control_fail(r, "TAA requires the Vulkan backend"); return;
     }
 #endif
-    if (s->kind == BOOL) *(bool *)s->value = value != 0;
+    if (is(s, "sbs_supersampling")) g_settings.sbs_render_scale = v ? SBS_SCALE_150 : SBS_SCALE_1X;
+    else if (s->kind == BOOL) *(bool *)s->value = value != 0;
     else if (s->kind == FLOAT) *(float *)s->value = (float)value;
     else *(int *)s->value = v;
     if (is(s, "fullscreen")) menu_request_window_apply();

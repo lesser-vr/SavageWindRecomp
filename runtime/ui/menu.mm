@@ -747,6 +747,8 @@ static void tab_display(void) {
         opt_choice("Toy-Con VR output", &g_settings.stereo_sbs, formats, SBS_COUNT, SBS_OFF,
                    "On game version 1.9.0, the VR goggles turn on automatically during gameplay. "
                    "Half-SBS uses a 16:9 output. Full-SBS uses a 32:9 output for two 16:9 views.");
+        opt_choice("SBS render scale", &g_settings.sbs_render_scale, sbs_scale_labels, SBS_SCALE_COUNT, SBS_SCALE_1X,
+                   "Auto matches each eye's visible image to its output pixels. The other choices scale both axes equally. Higher resolutions use more GPU time and memory.");
 #endif
         bool wv = g_settings.wide_view;
         if (opt_toggle("Fill wide screens", &wv, true,

@@ -44,6 +44,8 @@ Settings g_settings = {
 
 static const char *const k_vsync[VSYNC_COUNT] = {"on", "fast", "adaptive", "off"};  // (VSYNC_*: the ini's words)
 static const char *const k_hdr[HDR_COUNT] = {"auto", "on", "off"};             // (HDR_*)
+static const char *const k_sbs_scale[SBS_SCALE_COUNT] = {"1x", "1.25x", "1.5x", "2x", "auto"};
+const char *const sbs_scale_labels[SBS_SCALE_COUNT] = {"1x", "1.25x", "1.5x", "2x", "Auto (match output)"};
 static const char *const k_fsmode[FSMODE_COUNT] = {"auto", "borderless", "exclusive"};  // (FSMODE_*)
 
 // settings_version 2 (2026-10-19): the upscaler's mode, the window size and the 300% mouse default. Older files: their
@@ -86,6 +88,7 @@ void settings_load(void) {
     }
     char line[256];
     bool tip_key = false;
+    bool has_sbs_scale = false;
     int version = 1;
     char old_res[16] = "";
     while (fgets(line, sizeof line, f)) {
@@ -143,6 +146,12 @@ void settings_load(void) {
         else if (!strcmp(key, "frame_generation")) g_settings.frame_gen = atoi(val) != 0;
         else if (!strcmp(key, "stereo_sbs"))
             g_settings.stereo_sbs = !strcmp(val, "half") ? SBS_HALF : !strcmp(val, "full") ? SBS_FULL : SBS_OFF;
+        else if (!strcmp(key, "sbs_render_scale")) {
+            for (int i = 0; i < SBS_SCALE_COUNT; i++)
+                if (!strcmp(val, k_sbs_scale[i])) { g_settings.sbs_render_scale = i; has_sbs_scale = true; break; }
+        }
+        else if (!strcmp(key, "sbs_supersampling") && !has_sbs_scale)
+            g_settings.sbs_render_scale = atoi(val) == 1 ? SBS_SCALE_150 : SBS_SCALE_1X;
         else if (!strcmp(key, "sharpening")) {  // (percent, in steps of 10)
             int p = atoi(val);
             g_settings.sharpening = p < 0 ? 0 : p > 100 ? 10 : (p + 5) / 10;
@@ -295,6 +304,7 @@ void settings_save(void) {
     fprintf(f, "sharpening = %d\n", g_settings.sharpening * 10);
     fprintf(f, "frame_generation = %d\n", g_settings.frame_gen ? 1 : 0);
     fprintf(f, "stereo_sbs = %s\n", g_settings.stereo_sbs == SBS_HALF ? "half" : g_settings.stereo_sbs == SBS_FULL ? "full" : "off");
+    fprintf(f, "sbs_render_scale = %s\n", k_sbs_scale[g_settings.sbs_render_scale]);
     fprintf(f, "dpad_move = %d\n", g_settings.dpad_move);
     fprintf(f, "left_stick_deadzone = %.0f\n", g_settings.stick_deadzone[0] * 100);
     fprintf(f, "right_stick_deadzone = %.0f\n", g_settings.stick_deadzone[1] * 100);

@@ -8713,7 +8713,7 @@ void vk_present_draw(VkCommandBuffer cb, TexBackend *b, float vx, float vy, floa
             pc[1] = 1; // the RGB10A2 atlas is linear, presentation expects display-encoded colour
             pc[4] = eye ? 0.5f : 1.f / 16.f;
             pc[5] = 9.f / 32.f;
-            pc[6] = pc[7] = 7.f / 16.f;
+            pc[6] = pc[7] = SBS_EYE_CROP;
         }
         VkViewport vp = {vx + eye * vw / eyes, vy, vw / eyes, vh, 0, 1};
         rec_CmdSetViewport(cb, 0, 1, &vp);

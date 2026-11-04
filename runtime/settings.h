@@ -32,6 +32,8 @@ enum { AA_OFF = 0, AA_SMAA = 1, AA_TAA = 2 };
 enum { SHADOW_CONSOLE = 0, SHADOW_HIGH = 1 /* 2048 */, SHADOW_ULTRA = 2 /* 4096 */, SHADOW_EXTREME = 3 /* 8192 */, SHADOW_COUNT };
 enum { PERF_OFF = 0, PERF_FPS = 1, PERF_FULL = 2 };
 enum { SBS_OFF, SBS_HALF, SBS_FULL, SBS_COUNT };
+enum { SBS_SCALE_1X, SBS_SCALE_125, SBS_SCALE_150, SBS_SCALE_2X, SBS_SCALE_AUTO, SBS_SCALE_COUNT };
+extern const char *const sbs_scale_labels[SBS_SCALE_COUNT];
 // Frame rate (Video > Frame rate; runtime/hle/framepace.c): frames per second, 0 = no limit. The game's clock is the
 // same at every rate. The console runs the game at 30.
 #define FPS_DEFAULT 60
@@ -58,6 +60,7 @@ typedef struct {
     char display_name[64];
     int window_w, window_h;  // Video > Window size, pixels (0: not chosen; runtime/window_size.c)
     int stereo_sbs;      // SBS_*: presentation format for the game's Toy-Con VR mode
+    int sbs_render_scale;    // SBS_SCALE_*: per-axis multiplier or match the packed output
     int upscaler;        // UPSCALE_*: Off (render at the window's size), or render smaller and scale up
     int upscale_quality; // UPQ_*: the upscaler's mode (how much smaller it renders)
     int antialias;       // AA_*: anti-aliasing of the game image before it is scaled to the window

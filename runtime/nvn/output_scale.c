@@ -81,7 +81,7 @@ double upscale_factor(void) {
 static volatile float g_view_shape = 1, g_fov = 1;
 static uint32_t g_world_proj[4];  // tan(fovy / 2), aspect, near, far of the world camera's last matrix (rt_persp), float bits
 
-void output_scale(double dw, double dh, bool reshape_allowed, OutScale *o) {
+static void output_scale_axes(double dw, double dh, bool reshape_allowed, double width_factor, double limit, OutScale *o) {
     double fit = fmin(dw / 1920.0, dh / 1080.0);
     static double forced = -1, wide_test = -1;
     if (forced < 0) forced = getenv("SAVAGEWIND_SCALE") ? atof(getenv("SAVAGEWIND_SCALE")) : 0;
@@ -101,15 +101,15 @@ void output_scale(double dw, double dh, bool reshape_allowed, OutScale *o) {
 #endif
     double h = forced > 0 ? forced : (reshape ? dh / 1080.0 : fit) / out_div;
     h = fmax(h, 0.1);  // (a tiny window)
-    double sx = h * shape, sy = h;
-    double cap = fmin(MAX_TEX / (1920.0 * sx), MAX_TEX / (1080.0 * sy));
+    double sx = h * shape * width_factor, sy = h;
+    double cap = fmin(limit / (1920.0 * sx), limit / (1080.0 * sy));
     if (cap < 1.0) { sx *= cap; sy *= cap; }
     o->sx = sx; o->sy = sy; o->shape = shape;
     // the 3D scene (BOTW docked: 1600x900, composited into the 1920x1080 final image) at the final image's
     // resolution, divided by the upscaler's factor
     double k = 1080.0 / SCENE_LINES / scene_div;
     o->scene_sx = sx * k; o->scene_sy = sy * k;
-    double scap = fmin(MAX_TEX / (1920.0 * o->scene_sx), MAX_TEX / (1080.0 * o->scene_sy));
+    double scap = fmin(limit / (1920.0 * o->scene_sx), limit / (1080.0 * o->scene_sy));
     if (scap < 1.0) { o->scene_sx *= scap; o->scene_sy *= scap; }
     // where the image goes in the window: fills it when reshaped, else a fitted 16:9 box
     if (reshape) { o->vw = dw; o->vh = dh; }
@@ -139,6 +139,24 @@ void output_scale(double dw, double dh, bool reshape_allowed, OutScale *o) {
     last = now;
     float ease = dt >= 0.25 ? 1.0f : (float)(dt / 0.25);
     g_fov = fabsf(want - g_fov) < 0.001f ? want : g_fov + (want - g_fov) * ease;
+}
+
+void output_scale(double dw, double dh, bool reshape_allowed, OutScale *o) {
+    output_scale_axes(dw, dh, reshape_allowed, 1.0, MAX_TEX, o);
+}
+
+void output_scale_sbs(double dw, double dh, int format, int scale, unsigned max_dimension, OutScale *o) {
+    const double aspect = (format == SBS_FULL ? 32.0 : 16.0) / 9.0;
+    const double height = fmin(dh, dw / aspect);
+    const double width = height * aspect;
+    const double eye_width = height * (16.0 / 9.0); // before horizontal packing
+    static const double factors[SBS_SCALE_COUNT] = {1.0, 1.25, 1.5, 2.0, 1.0 / SBS_EYE_CROP};
+    // Auto: crop * atlas size = (width / 2, height). Keep the guest projection at 16:9.
+    double width_factor = scale == SBS_SCALE_AUTO ? (width * 0.5) / eye_width : 1.0;
+    double factor = factors[scale];
+    output_scale_axes(eye_width * factor, height * factor, false, width_factor, fmin(max_dimension, MAX_TEX), o);
+    o->vw = width; o->vh = height;
+    o->vx = (dw - width) * 0.5; o->vy = (dh - height) * 0.5;
 }
 
 float output_view_shape(void) { return g_view_shape; }

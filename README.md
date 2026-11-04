@@ -92,6 +92,8 @@ slower.
 2. Load a save. On game version 1.9.0, the port automatically enables the game's **Toy-Con VR Goggles** when gameplay starts or resumes with SBS selected. The game creates the two views. For a fixed gamepad-controlled camera, turn off the game's motion aiming option.
 3. Set the display or player to the matching SBS mode with the left eye first. Selecting **Off** in **Toy-Con VR output** also turns off goggles that SBS enabled when you resume play.
 
+**Video > SBS render scale** offers 1x (default), 1.25x, 1.5x, 2x and Auto (match output). The multipliers scale both axes of the original SBS render targets. Auto sizes the visible part of each eye to the pixels it occupies in the current Half-SBS or Full-SBS output, accounting for letterboxing and the goggles crop. The scene upscaler and GPU texture limits still apply. In `savagewind.ini`, set `sbs_render_scale` to `1x`, `1.25x`, `1.5x`, `2x` or `auto`. Existing `sbs_supersampling` settings carry over as 1x or 1.5x.
+
 The renderer takes the native eye images before the goggles' distortion pass and crops a rectangular 16:9 view from each eye's mask. This reduces the visible field of view. Menu or movie frames without the goggles pass are repeated in both eyes. Frame generation is suspended while SBS is selected. For manual configuration, use `stereo_sbs = half`, `full`, or `off` in `savagewind.ini`.
 
 ## Where are my saves?

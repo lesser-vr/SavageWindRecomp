@@ -12,6 +12,9 @@ typedef struct {
 
 // dw x dh: the window's drawable size in pixels
 void output_scale(double dw, double dh, bool reshape_allowed, OutScale *o);
+// Fraction of the pre-lens atlas sampled along each axis for one gameplay eye.
+#define SBS_EYE_CROP (7.f / 16.f)
+void output_scale_sbs(double dw, double dh, int format, int scale, unsigned max_dimension, OutScale *o);
 // Fullscreen on a size the display has no mode for (runtime/window_size.c): output_scale ran on that iw x ih image
 // size; this moves its placement onto the sw x sh screen (scaled to fit, centred).
 void output_scale_screen(double sw, double sh, int iw, int ih, OutScale *o);
