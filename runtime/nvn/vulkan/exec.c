@@ -1062,6 +1062,7 @@ static uint32_t tex_wh[2][64][2];
 
 // ================================================================== render passes
 static VkFormat pass_color[8], pass_depth, pass_stencil;
+static uint64_t labo_scene_frame;  // Last frame that rendered a 3D eye with depth.
 static uint32_t pass_ncolor, pass_samples = 1, pass_w, pass_h;
 // (mvec.c) the motion target's slot in the current pass (-1: none), the frame it was last cleared in
 static int pass_mvec = -1;
@@ -1846,6 +1847,7 @@ static void begin_pass(void) {
         if (v) pass_barrier_note(b);
         if (b && b->drawn_frame != renderer_present_count()) { b->prev_drawn = b->drawn_frame; b->drawn_frame = renderer_present_count(); }
         if (v && renderer_format_is_depth(st.rt.depth->format)) {
+            if (b->rs_group == RS_LABO_EYE) labo_scene_frame = renderer_present_count() + 1;
             VkRenderingAttachmentInfo a = {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO, .imageView = v,
                                            .imageLayout = VK_IMAGE_LAYOUT_GENERAL, .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
                                            .storeOp = VK_ATTACHMENT_STORE_OP_STORE};
@@ -8657,13 +8659,20 @@ static TexBackend *fsr3_scene(VkCommandBuffer cb, TexBackend *b, uint32_t ow, ui
 }
 
 static TexBackend *labo_atlas;
-static uint64_t labo_frame;
+static uint64_t labo_frame, labo_logo_frame;
 
 // BOTW 1.9.0's hdr_compose goggles variants read the distortion LUT and the finished, linear RGB10A2
 // atlas (including the game HUD). Snapshot it while both images are live. A different frame, such
 // as a menu or movie that the game only draws once, must never reuse the previous stereo image.
 static void capture_labo_atlas(Prog *pr) {
     switch (g_cur_fs_hash) {
+    case 0x9b989759db6e6606ull: { // Loading progress fill over the logo's alpha mask.
+        if (pr->fi->ntex != 2 || st.rt.ncolor != 1 || !st.rt.color[0] || st.rt.color[0]->format != 0x3d) return;
+        NvnTexture *mask = shader_texture_object(1, &pr->fi->tex[1]);
+        if (mask && mask->format == 1 && mask->width == 360 && mask->height == 257)
+            labo_logo_frame = renderer_present_count() + 1;
+        return;
+    }
     case 0x2490210db9154f00ull: case 0xacfdceb95c3b2a7bull:
     case 0x22db5652fcc60420ull: case 0x4794839af8a0b871ull: break;
     default: return;
@@ -8692,6 +8701,9 @@ void vk_present_draw(VkCommandBuffer cb, TexBackend *b, float vx, float vy, floa
     if (!b || !b->image || (b->aspect & ~VK_IMAGE_ASPECT_COLOR_BIT)) return;
     bool sbs = g_settings.stereo_sbs != SBS_OFF;
     bool native = sbs && labo_atlas && labo_frame == renderer_present_count() + 1;
+    // The departing scene fades before the loading page appears. The new scene can render
+    // behind the still-visible page before its logo slides away.
+    bool loading = native && (labo_scene_frame != labo_frame || labo_logo_frame == labo_frame) && framepace_loading_ui();
     float display_w = sbs ? vh * (16.f / 9.f) : vw;
     VkImageView src = native ? raw_view(labo_atlas) : post_process(cb, b, pv[6] > 0 ? display_w / pv[6] : display_w, pv[7] > 0 ? vh / pv[7] : vh);
     VkPipeline p = present_pipeline(g_vk.sc_format);
@@ -8703,19 +8715,28 @@ void vk_present_draw(VkCommandBuffer cb, TexBackend *b, float vx, float vy, floa
     rec_CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, p);
     vk_dyn_forget();
     rec_CmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, present_layout, 0, 1, &ds, 0, NULL);
-    int eyes = sbs ? 2 : 1;
-    for (int eye = 0; eye < eyes; eye++) {
+    int panels = loading ? 4 : sbs ? 2 : 1;
+    for (int panel = 0; panel < panels; panel++) {
         float pc[8];
         memcpy(pc, pv, sizeof pc);
         if (native) {
-            // A centered 560x315 rectangle in each masked 640x720 eye of the 1280x720 reference
-            // atlas. Lens axes are offset inward. Coordinates stay normalized at other resolutions.
             pc[1] = 1; // the RGB10A2 atlas is linear, presentation expects display-encoded colour
-            pc[4] = eye ? 0.5f : 1.f / 16.f;
-            pc[5] = 9.f / 32.f;
-            pc[6] = pc[7] = SBS_EYE_CROP;
+            if (loading) {
+                // The flat 16:9 loading page spans 46% of the atlas in each axis. Its outer
+                // edges are at x=.056 and .944. Each inner edge is clipped at the eye boundary.
+                // Take the intact outer half of each copy to reconstruct one page for both eyes.
+                pc[7] = 0.46f;
+                pc[6] = pc[7] * 0.5f;
+                pc[4] = panel % 2 ? 1.f - 0.056f - pc[6] : 0.056f;
+                pc[5] = (1.f - pc[7]) * 0.5f;
+            } else {
+                // A 560x315 rectangle in each masked 640x720 eye, offset toward the lens axis.
+                pc[4] = panel ? 0.5f : 1.f / 16.f;
+                pc[5] = 9.f / 32.f;
+                pc[6] = pc[7] = SBS_EYE_CROP;
+            }
         }
-        VkViewport vp = {vx + eye * vw / eyes, vy, vw / eyes, vh, 0, 1};
+        VkViewport vp = {vx + panel * vw / panels, vy, vw / panels, vh, 0, 1};
         rec_CmdSetViewport(cb, 0, 1, &vp);
         rec_CmdPushConstants(cb, present_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof pc, pc);
         rec_CmdDraw(cb, 3, 1, 0, 0);
