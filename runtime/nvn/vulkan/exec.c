@@ -6922,7 +6922,7 @@ static void build_compute(void *arg) {
     cp->p.set_layout[0] = c->set_layout;
     cp->p.layout = c->layout;
     cp->pipe = c->pipe;
-    atomic_store(&cp->p.state, atomic_load(&c->state) == 2 ? 1 : 2);
+    finish_build(&cp->p.state, atomic_load(&c->state) == 2 ? 1 : 2);
 }
 
 static struct CsEnt { uint64_t addr; CsProg *cp; } g_cs_tab[256];  // compute programs by code address
