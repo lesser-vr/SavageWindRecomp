@@ -527,6 +527,20 @@ test-gpu-settings: $(B)/test_gpu_settings
 
 .PHONY: test-gpu-settings
 
+$(B)/test_sbs_hud_settings: tests/test_sbs_hud_settings.c runtime/settings.c runtime/settings.h runtime/gpu_select.h runtime/hle/bindings.c
+	@mkdir -p $(dir $@)
+	$(CC) -O1 -DSDL_STATIC_LIB $(OSFLAGS) $(DEPINC) -Iruntime -o $@ $< -lSDL3 -lm
+
+test-sbs-hud-settings: $(B)/test_sbs_hud_settings
+	@set -e; tmp=$$(mktemp); trap 'rm -f "$$tmp"' EXIT; \
+	 $(B)/test_sbs_hud_settings "$$tmp" 0; \
+	 $(B)/test_sbs_hud_settings "$$tmp" 1; \
+	 $(B)/test_sbs_hud_settings "$$tmp" 0; \
+	 printf 'sbs_hud = invalid\n' > "$$tmp"; \
+	 $(B)/test_sbs_hud_settings "$$tmp" 0
+
+.PHONY: test-sbs-hud-settings
+
 $(B)/test_hud_scale: tests/test_hud_scale.c runtime/nvn/hud_scale.h
 	@mkdir -p $(dir $@)
 	$(CC) -O1 -Iruntime -o $@ $< -lm

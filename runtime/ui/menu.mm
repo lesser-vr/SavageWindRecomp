@@ -791,6 +791,8 @@ static void tab_display(void) {
                    "Half-SBS uses a 16:9 output. Full-SBS uses a 32:9 output for two 16:9 views.");
         opt_choice("SBS render scale", &g_settings.sbs_render_scale, sbs_scale_labels, SBS_SCALE_COUNT, SBS_SCALE_1X,
                    "Auto matches each eye's visible image to its output pixels. The other choices scale both axes equally. Higher resolutions use more GPU time and memory.");
+        opt_choice("SBS HUD", &g_settings.sbs_hud, sbs_hud_labels, SBS_HUD_COUNT, SBS_HUD_FULL,
+                   "Full HUD restores gameplay information and fits it inside each eye. Original VR HUD keeps the game's restricted goggles display. Applies while SBS is active; the game's Pro HUD setting still applies.");
 #endif
         bool wv = g_settings.wide_view;
         if (opt_toggle("Fill wide screens", &wv, true,

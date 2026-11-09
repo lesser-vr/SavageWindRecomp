@@ -7,6 +7,7 @@
 
 static bool checked;  // Respect a manual goggles toggle until the next load or SBS selection.
 static uint64_t enabled_manager;  // Only undo a request we made for this VR manager.
+static int applied_hud = -1;
 
 // These widgets keep their flat-screen positions in native VR. Bring them
 // inside the rectangular eye crop, in layout units independent of output size.
@@ -70,19 +71,20 @@ static void hud_layout(bool sbs) {
 
 // Only UI queries use this: the scene and camera must still see native VR.
 int native_vr_restore_hud(void) {
-    return g_settings.stereo_sbs != SBS_OFF;
+    return g_settings.stereo_sbs != SBS_OFF && g_settings.sbs_hud == SBS_HUD_FULL;
 }
 
 RT_ON_RESET(native_vr_reset) {
     checked = false;
     enabled_manager = 0;
+    applied_hud = -1;
     for (unsigned i = 0; i < sizeof hud_widgets / sizeof *hud_widgets; i++)
         hud_widgets[i].root = hud_widgets[i].pane = 0;
 }
 
 void native_vr_frame(void) {
     bool sbs = g_settings.stereo_sbs != SBS_OFF;
-    if (!strcmp(g_game_version, "1.9.0")) hud_layout(sbs);
+    if (!strcmp(g_game_version, "1.9.0")) hud_layout(native_vr_restore_hud());
     if (!sbs && !enabled_manager) {
         checked = false;
         return;
@@ -92,7 +94,7 @@ void native_vr_frame(void) {
         checked = false;
         return;
     }
-    if (sbs && checked) return;  // Half <-> Full needs no game change.
+    if (sbs && checked && applied_hud == g_settings.sbs_hud) return;
 
     float pos[3];
     if (framepace_paused() || !perfmon_position(pos) || (!pos[0] && !pos[1] && !pos[2])) return;
@@ -105,20 +107,26 @@ void native_vr_frame(void) {
 
     if (vr != enabled_manager) enabled_manager = 0;
     bool goggles_on = LD8(vr + 0x10) != 0;
-    if (goggles_on != sbs && (sbs || enabled_manager)) {
+    bool change_goggles = goggles_on != sbs && (sbs || enabled_manager) && (!sbs || !checked);
+    bool refresh_hud = sbs && goggles_on && applied_hud != g_settings.sbs_hud;
+    if (change_goggles || refresh_hud) {
         Cpu *cpu = kernel_current_cpu();
         Cpu saved = *cpu;
-        cpu->x[0] = vr;
-        cpu->x[1] = sbs;
-        guest_call(cpu, MAIN_BASE + 0x1260e20);
+        if (change_goggles) {
+            cpu->x[0] = vr;
+            cpu->x[1] = sbs;
+            guest_call(cpu, MAIN_BASE + 0x1260e20);
+            enabled_manager = vr;
+            LOG("[stereo] SBS requested Toy-Con VR goggles %s\n", sbs ? "on" : "off");
+        }
         cpu->x[0] = sbs;
         guest_call(cpu, MAIN_BASE + 0xe8a360);
         cpu->x[0] = sbs;
         guest_call(cpu, MAIN_BASE + 0xe8a410);
         *cpu = saved;
-        enabled_manager = vr;
-        LOG("[stereo] SBS requested Toy-Con VR goggles %s\n", sbs ? "on" : "off");
+        if (sbs) LOG("[stereo] SBS HUD %s\n", g_settings.sbs_hud == SBS_HUD_FULL ? "full" : "original");
     }
     if (!sbs) enabled_manager = 0;
     checked = sbs;
+    applied_hud = g_settings.sbs_hud;
 }

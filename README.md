@@ -127,7 +127,7 @@ The renderer takes the native eye images before the goggles' distortion pass and
 
 After updating a Windows build, run the [SBS gameplay and frame-time checks](docs/SBS-testing.md) with a copy of your own save.
 
-SBS retains the regular gameplay HUD, including champion abilities and the minimap, instead of the native goggles' restricted HUD. The game's Pro HUD setting still applies. Updating from an earlier SBS build requires the matching game-code generator and rebuilding the game code in Configuration; replacing only the executable leaves the previous HUD behavior in the game library.
+**Video > SBS HUD** defaults to **Full HUD**, restoring champion abilities, the minimap and the other gameplay indicators inside each eye. Choose **Original VR HUD** for the native goggles' restricted display. Changes apply when gameplay resumes; the game's Pro HUD setting still applies. The INI key is `sbs_hud = full` or `original`. Updating from an SBS build that predates the HUD fix requires the matching game-code generator and rebuilding the game code in Configuration; replacing only the executable leaves the previous HUD behavior in the game library.
 
 ## Where are my saves?
 

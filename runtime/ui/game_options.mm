@@ -437,6 +437,11 @@ void build_items(void) {
                        [](const Item &, int x) { return tr(sbs_scale_labels[x]); },
                        [](const Item &) { return g_settings.sbs_render_scale; },
                        [](const Item &, int x) { g_settings.sbs_render_scale = x; }, SBS_SCALE_1X));
+    v.push_back(choice(P_VIDEO, "SBS HUD", "Full HUD restores gameplay information and fits it inside each eye. Original VR HUD keeps the game's restricted goggles display. Applies while SBS is active; the game's Pro HUD setting still applies.",
+                       [](const Item &) { return N(sbs_hud_labels); },
+                       [](const Item &, int x) { return tr(sbs_hud_labels[x]); },
+                       [](const Item &) { return g_settings.sbs_hud; },
+                       [](const Item &, int x) { g_settings.sbs_hud = x; }, SBS_HUD_FULL));
 #endif
     v.push_back(toggle(P_VIDEO, "Fill wide screens", "Shows more of the world on screens that aren't 16:9 (wider or taller), instead of bars.",
                        [](const Item &) { return (int)g_settings.wide_view; },

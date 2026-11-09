@@ -70,6 +70,7 @@ static const char *const k_vsync[VSYNC_COUNT] = {"on", "fast", "adaptive", "off"
 static const char *const k_hdr[HDR_COUNT] = {"auto", "on", "off"};             // (HDR_*)
 static const char *const k_sbs_scale[SBS_SCALE_COUNT] = {"1x", "1.25x", "1.5x", "2x", "auto"};
 const char *const sbs_scale_labels[SBS_SCALE_COUNT] = {"1x", "1.25x", "1.5x", "2x", "Auto (match output)"};
+const char *const sbs_hud_labels[SBS_HUD_COUNT] = {"Full HUD", "Original VR HUD"};
 static const char *const k_sparse_heap[SPARSE_HEAP_COUNT] = {"auto", "on", "off"};
 static const char *const k_tex_lod_bias[TEX_LOD_COUNT] = {"default", "sharp", "sharper"};
 static const char *const k_fsmode[FSMODE_COUNT] = {"auto", "borderless", "exclusive"};  // (FSMODE_*)
@@ -265,6 +266,8 @@ void settings_load(void) {
         else if (!strcmp(key, "frame_generation")) g_settings.frame_gen = atoi(val) != 0;
         else if (!strcmp(key, "stereo_sbs"))
             g_settings.stereo_sbs = !strcmp(val, "half") ? SBS_HALF : !strcmp(val, "full") ? SBS_FULL : SBS_OFF;
+        else if (!strcmp(key, "sbs_hud"))
+            g_settings.sbs_hud = !strcmp(val, "original") ? SBS_HUD_ORIGINAL : SBS_HUD_FULL;
         else if (!strcmp(key, "sbs_render_scale")) {
             for (int i = 0; i < SBS_SCALE_COUNT; i++)
                 if (!strcmp(val, k_sbs_scale[i])) { g_settings.sbs_render_scale = i; has_sbs_scale = true; break; }
@@ -507,6 +510,7 @@ void settings_save(void) {
     fprintf(f, "sharpening = %d\n", g_settings.sharpening * 10);
     fprintf(f, "frame_generation = %d\n", g_settings.frame_gen ? 1 : 0);
     fprintf(f, "stereo_sbs = %s\n", g_settings.stereo_sbs == SBS_HALF ? "half" : g_settings.stereo_sbs == SBS_FULL ? "full" : "off");
+    fprintf(f, "sbs_hud = %s\n", g_settings.sbs_hud == SBS_HUD_ORIGINAL ? "original" : "full");
     fprintf(f, "sbs_render_scale = %s\n", k_sbs_scale[g_settings.sbs_render_scale]);
     fprintf(f, "rumble = %d\n", g_settings.rumble);
     fprintf(f, "rumble_strength = %d\n", g_settings.rumble_strength);

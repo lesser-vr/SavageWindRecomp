@@ -200,7 +200,7 @@ def run_case(case, install, save, settings, mode, warp, sticks):
     (case/'build/frames').mkdir(parents=True)
     # Preserve unrelated settings in a private INI. Both sides of an A/B use this same template.
     overrides = dict(fullscreen='0', window_size=size, frame_rate='60', vsync='fast', volume='0',
-                     stereo_sbs='full' if mode == 'full' else 'half', sbs_render_scale='1x',
+                     stereo_sbs='full' if mode == 'full' else 'half', sbs_render_scale='1x', sbs_hud='full',
                      render_scale='100', upscaler='off', frame_generation='0', perf_overlay='off',
                      hdr='off', save_backups='0', start_at_continue='0')
     if not bench:

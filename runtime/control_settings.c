@@ -32,6 +32,7 @@ static const Setting settings[] = {
     I(render_scale, 0, RSCALE_COUNT - 1, "50|75|100|125|150|200"),
 #ifndef __APPLE__
     I(stereo_sbs, SBS_OFF, SBS_FULL, "off|half|full"),
+    I(sbs_hud, SBS_HUD_FULL, SBS_HUD_ORIGINAL, "full|original"),
     I(sbs_render_scale, SBS_SCALE_1X, SBS_SCALE_AUTO, "1x|1.25x|1.5x|2x|auto"),
     {"sbs_supersampling", NULL, BOOL, 0, 1, "off|on"},  // Legacy 1.5x switch.
 #endif
