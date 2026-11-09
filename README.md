@@ -125,6 +125,8 @@ slower.
 
 The renderer takes the native eye images before the goggles' distortion pass and crops a rectangular 16:9 view from each eye's mask. This reduces the visible field of view. Menu or movie frames without the goggles pass are repeated in both eyes. Frame generation is suspended while SBS is selected. For manual configuration, use `stereo_sbs = half`, `full`, or `off` in `savagewind.ini`.
 
+After updating a Windows build, run the [SBS gameplay and frame-time checks](docs/SBS-testing.md) with a copy of your own save.
+
 ## Where are my saves?
 
 Saves are in the `save` folder inside Savage Wind's data folder:
