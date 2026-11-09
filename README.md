@@ -127,6 +127,8 @@ The renderer takes the native eye images before the goggles' distortion pass and
 
 After updating a Windows build, run the [SBS gameplay and frame-time checks](docs/SBS-testing.md) with a copy of your own save.
 
+SBS retains the regular gameplay HUD, including champion abilities and the minimap, instead of the native goggles' restricted HUD. The game's Pro HUD setting still applies. Updating from an earlier SBS build requires the matching game-code generator and rebuilding the game code in Configuration; replacing only the executable leaves the previous HUD behavior in the game library.
+
 ## Where are my saves?
 
 Saves are in the `save` folder inside Savage Wind's data folder:

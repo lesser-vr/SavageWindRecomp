@@ -19,6 +19,26 @@ def _word(gen, a):
     return struct.unpack_from('<I', gen.nso.image, a - gen.base)[0]
 
 
+def _native_vr_hud_query(gen, a):
+    # B/BL to the native goggles getter, in HUD-only queries. Preserve Pro HUD's
+    # earlier test and all scene/camera queries of the real goggles state.
+    w = _word(gen, a)
+    assert w & 0x7c000000 == 0x14000000, hex(w)
+    offset = w & 0x3ffffff
+    if offset & 0x2000000:
+        offset -= 0x4000000
+    target = a + offset * 4
+    assert _word(gen, target) == 0x39404000  # ldrb w0, [x0, #0x10]
+    assert _word(gen, target + 4) == 0xd65f03c0  # ret
+    call = bool(w & 0x80000000)
+    branch = (f'c->pc = {target:#x}ull; rt_dispatch(c);' if call else
+              f'c->pc = {target:#x}ull; __attribute__((musttail)) return rt_dispatch(c);')
+    return ('{ extern int native_vr_restore_hud(void); '
+            + (f'c->x[30] = {a + 4:#x}ull; ' if call else '')
+            + 'if (native_vr_restore_hud()) { c->x[0] = 0; ' + ('' if call else 'return; ')
+            + '} else { ' + branch + ' } }')
+
+
 def _quick_sort_enter(gen, a):
     # Menu::enter: sample held X before the selector initializes its list.
     assert _word(gen, a) == 0xfc1d0fe8, hex(_word(gen, a))  # str d8, [sp, #-0x30]!
@@ -877,6 +897,8 @@ def _tp_gate(gen, a):
 
 
 PATCHES = {
+    'native_vr_hud_query': _native_vr_hud_query,
+    'native_vr_minimap_query': _native_vr_hud_query,
     'quick_drop_tick': _quick_drop_tick,
     'quick_drop_actor_call': _quick_drop_actor_call,
     'quick_sort_enter': _quick_sort_enter,
